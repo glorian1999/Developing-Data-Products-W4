@@ -1,30 +1,39 @@
 library(shiny)
 library(ggplot2)
+library(dplyr)
+library(rsconnect)
 
+diam <- diamonds[,c(1:4,7)]# Select columns to be used in the analysis
+# Define server logic required to draw a plot
 shinyServer(function(input, output) {
-  
-  dataset <- reactive( {
-    mtcars[sample(nrow(mtcars), input$sampleSize),]
-  })
-  
-  output$plot <- reactivePlot(function() {
-    
-    p <- ggplot(dataset(), aes_string(x=input$x, y=input$y)) + geom_point()
-    
-    if (input$color != 'None')
-      p <- p + aes_string(color=input$color)
-    
-    facets <- paste(input$facet_row, '~', input$facet_col)
-    if (facets != '. ~ .')
-      p <- p + facet_grid(facets)
-    
-    # if (input$jitter)
-    #      p <- p + geom_jitter()
-    if (input$smooth)
-      p <- p + geom_smooth()
-    
-    print(p)
-    
-  }, height=600
-  )
+        output$distPlot <- renderPlot({
+                # Select diamonds depending of user input
+                diam <- filter(diamonds, grepl(input$cut, cut), grepl(input$col, color), grepl(input$clar, clarity))
+                # build linear regression model
+                fit <- lm( price~carat, diam)
+                # predicts the price
+                pred <- predict(fit, newdata = data.frame(carat = input$car,
+                                                          cut = input$cut,
+                                                          color = input$col,
+                                                          clarity = input$clar))
+                # Draw the plot using ggplot2
+                plot <- ggplot(data=diam, aes(x=carat, y = price))+
+                        geom_point(aes(color = cut), alpha = 0.3)+
+                        geom_smooth(method = "lm")+
+                        geom_vline(xintercept = input$car, color = "red")+
+                        geom_hline(yintercept = pred, color = "green")
+                plot
+        })
+        output$result <- renderText({
+                # Renders the text for the prediction below the graph
+                diam <- filter(diamonds, grepl(input$cut, cut), grepl(input$col, color), grepl(input$clar, clarity))
+                fit <- lm( price~carat, diam)
+                pred <- predict(fit, newdata = data.frame(carat = input$car,
+                                                          cut = input$cut,
+                                                          color = input$col,
+                                                          clarity = input$clar))
+                res <- paste(round(pred, digits = 1.5),"$" )
+                res
+        })
+
 })
