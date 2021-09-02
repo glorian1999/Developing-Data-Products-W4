@@ -26,73 +26,78 @@ gear Number of forward gears
 carb Number of carburetors
 consult mtcars {datasets} R Documentation for more details
 
-## ui.R code
+##ui.R
 library(shiny)
-library(ggplot2)
-
-dataset <- mtcars
-
-shinyUI(pageWithSidebar(
-
-     headerPanel("Mtcars Plotter"),
-
-     sidebarPanel(
-
-          sliderInput('sampleSize', 'Sample Size', min=10, max=nrow(dataset),
-                      value=min(10, nrow(dataset)), step=5, round=0),
-
-          selectInput('x', 'X', names(dataset)),
-          selectInput('y', 'Y', names(dataset), names(dataset)[[2]]),
-          selectInput('color', 'Color', c('None', names(dataset))),
-
-          # checkboxInput('jitter', 'Jitter'),
-          checkboxInput('smooth', 'Smooth'),
-
-          selectInput('facet_row', 'Facet Row', c(None='.', names(dataset))),
-          selectInput('facet_col', 'Facet Column', c(None='.', names(dataset)))
-     ),
-
-     mainPanel(
-          plotOutput('plot')
-     )
+# Define UI for application that draws a histogram
+shinyUI(fluidPage(
+    # Application title
+    titlePanel("Price predictor for Diamonds"), 
+    # Sidebar with options selectors
+    sidebarLayout(
+        sidebarPanel(
+            helpText("This application is a predictor for the price of a diamond based on its characteristics."),
+            h3(helpText("Select:")),
+            numericInput("car", label = h4("Carats"), step = 0.01, value = 1.5),
+            selectInput("cut", label = h4("Cut"),
+                        choices = list("Unknown" = "*", "Fair" = "Fair", "Good" = "^Good",
+                                       "Very Good" = "Very Good", "Premium" = "Premium",
+                                       "Ideal" = "Ideal")),
+            selectInput("col", label = h4("Color"),
+                        choices = list("Unknown" = "*", "D" = "D", "E" = "E",
+                                       "F" = "F", "G" ="G",
+                                       "H" = "H", "I" = "I",
+                                       "J" = "J")),
+            selectInput("clar", label = h4("Clarity"),
+                        choices = list("Unknown" = "*", "I1" = "I1", "SI2" = "SI2",
+                                       "SI1" = "SI1", "VS2" = "VS2", "VS1" = "VS1",
+                                       "VVS2" = "VVS2", "VVS1" = "VVS1", "IF" = "IF" ))
+        ),
+        # Show a plot with diamonds and regression line
+        mainPanel(
+            plotOutput("distPlot"),
+            h4("Predicted value of this diamond is:"),
+            h3(textOutput("result"))
+        )
+    )
 ))
 
-
-## server.R code
-
+##server.R
 library(shiny)
 library(ggplot2)
+library(dplyr)
+library(rsconnect)
 
+diam <- diamonds[,c(1:4,7)]# Select columns to be used in the analysis
+# Define server logic required to draw a plot
 shinyServer(function(input, output) {
-
-     dataset <- reactive( {
-          mtcars[sample(nrow(mtcars), input$sampleSize),]
-     })
-
-     output$plot <- reactivePlot(function() {
-
-          p <- ggplot(dataset(), aes_string(x=input$x, y=input$y)) + geom_point()
-
-          if (input$color != 'None')
-               p <- p + aes_string(color=input$color)
-
-          facets <- paste(input$facet_row, '~', input$facet_col)
-          if (facets != '. ~ .')
-               p <- p + facet_grid(facets)
-
-          # if (input$jitter)
-          #      p <- p + geom_jitter()
-          if (input$smooth)
-               p <- p + geom_smooth()
-
-          print(p)
-
-     }, height=600
-     )
-
+    output$distPlot <- renderPlot({
+        # Select diamonds depending of user input
+        diam <- filter(diamonds, grepl(input$cut, cut), grepl(input$col, color), grepl(input$clar, clarity))
+        # build linear regression model
+        fit <- lm( price~carat, diam)
+        # predicts the price
+        pred <- predict(fit, newdata = data.frame(carat = input$car,
+                                                  cut = input$cut,
+                                                  color = input$col,
+                                                  clarity = input$clar))
+        # Draw the plot using ggplot2
+        plot <- ggplot(data=diam, aes(x=carat, y = price))+
+            geom_point(aes(color = cut), alpha = 0.3)+
+            geom_smooth(method = "lm")+
+            geom_vline(xintercept = input$car, color = "red")+
+            geom_hline(yintercept = pred, color = "green")
+        plot
+    })
+    output$result <- renderText({
+        # Renders the text for the prediction below the graph
+        diam <- filter(diamonds, grepl(input$cut, cut), grepl(input$col, color), grepl(input$clar, clarity))
+        fit <- lm( price~carat, diam)
+        pred <- predict(fit, newdata = data.frame(carat = input$car,
+                                                  cut = input$cut,
+                                                  color = input$col,
+                                                  clarity = input$clar))
+        res <- paste(round(pred, digits = 1.5),"$" )
+        res
+    })
+    
 })
-
-
-## Sample Grafic generated from the app
-
-This is a sample analysis performed with the shiny app. It shows the miles per US gallon on the x-axis, and horse power on the y-axis. The color is representing the weight (lighter is heavier). The plot is in 2 facet rows, upper plot shows cars with automatic transmission the lower with manual transmission. Feel free to explore the dataset using the link provided on the last slide.
